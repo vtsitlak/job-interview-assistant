@@ -4,6 +4,7 @@ from typing import Protocol, cast
 
 import streamlit as st
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
 
@@ -32,6 +33,21 @@ if "chat_complete" not in st.session_state:
     st.session_state.chat_complete = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+
+def _gemini_content_role(role: str) -> str:
+    """Gemini GenerateContent expects 'user' or 'model', not 'assistant'."""
+    return "model" if role == "assistant" else role
+
+
+def _api_error_hint(exc: genai_errors.APIError) -> str:
+    parts = []
+    if exc.message:
+        parts.append(str(exc.message))
+    parts.append(f"HTTP {exc.code}")
+    if exc.status:
+        parts.append(str(exc.status))
+    return " — ".join(parts)
 
 
 # Helper functions to update session state
@@ -151,36 +167,52 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             with st.chat_message("user"):
                 _ = st.markdown(prompt)
 
+            turn_recorded = False
             if st.session_state.user_message_count < 4:
                 # Build conversation history in Gemini format
                 history = [
                     types.Content(
-                        role=m["role"],
+                        role=_gemini_content_role(m["role"]),
                         parts=[types.Part(text=m["content"])],
                     )
                     for m in messages[:-1]
                 ]
 
-                with st.chat_message("assistant"):
-                    def stream_response():
-                        for chunk in client.models.generate_content_stream(
-                            model=cast(str, st.session_state["gemini_model"]),
-                            contents=history
-                            + [
-                                types.Content(
-                                    role="user",
-                                    parts=[types.Part(text=prompt)],
+                try:
+                    with st.chat_message("assistant"):
+                        def stream_response():
+                            for chunk in client.models.generate_content_stream(
+                                model=cast(str, st.session_state["gemini_model"]),
+                                contents=history
+                                + [
+                                    types.Content(
+                                        role="user",
+                                        parts=[types.Part(text=prompt)],
+                                    ),
+                                ],  # pyright: ignore[reportArgumentType]
+                                config=types.GenerateContentConfig(
+                                    system_instruction=SYSTEM_PROMPT
                                 ),
-                            ],  # pyright: ignore[reportArgumentType]
-                            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
-                        ):
-                            if chunk.text:
-                                yield chunk.text
+                            ):
+                                if chunk.text:
+                                    yield chunk.text
 
-                    response = st.write_stream(stream_response())
-                _ = messages.append({"role": "assistant", "content": str(response)})
+                        response = st.write_stream(stream_response())
+                    _ = messages.append({"role": "assistant", "content": str(response)})
+                    turn_recorded = True
+                except genai_errors.APIError as exc:
+                    _ = messages.pop()
+                    _ = st.error(
+                        "The model could not finish this reply. "
+                        f"{_api_error_hint(exc)} "
+                        "If this keeps happening, open **Manage app → Logs** on Streamlit Cloud "
+                        "for the full error, and confirm your API key and model id in Secrets."
+                    )
+            else:
+                turn_recorded = True
 
-            st.session_state.user_message_count += 1
+            if turn_recorded:
+                st.session_state.user_message_count += 1
 
     if st.session_state.user_message_count >= 5:
         st.session_state.chat_complete = True
@@ -241,9 +273,16 @@ if st.session_state.feedback_shown:
                 if chunk.text:
                     yield chunk.text
 
-        with st.spinner("Generating feedback…"):
-            streamed = str(st.write_stream(stream_feedback()))
-        st.session_state.feedback_body = streamed
+        try:
+            with st.spinner("Generating feedback…"):
+                streamed = str(st.write_stream(stream_feedback()))
+            st.session_state.feedback_body = streamed
+        except genai_errors.APIError as exc:
+            _ = st.error(
+                "Could not generate feedback. "
+                f"{_api_error_hint(exc)} "
+                "Check **Manage app → Logs** on Streamlit Cloud for details."
+            )
     else:
         _ = st.markdown(cast(str, st.session_state["feedback_body"]))
 
