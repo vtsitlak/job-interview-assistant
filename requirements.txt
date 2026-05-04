@@ -1,20 +1,3 @@
-# Your `pip` is using Python 3.9 (`...\python39\...`). Install the newest interpreter and a
-# venv (3.11+ recommended) when you want the latest Streamlit / google-genai.
-#
-# Locks below keep installs working on Python 3.9. On 3.10+ you may remove ",<..." and bump freely.
-# google-genai 1.48+ requires Python >=3.10 — latest for 3.9 is the 1.47.x line.
-# Streamlit 1.51+ requires Python >=3.10.
-#
-# -----------------------------------------------------------------------------
-# Third-party runtime dependencies for app.end.py (Streamlit + Gemini + JS reload):
-#   - streamlit: UI / session state / chat widgets
-#   - google-genai: `from google import genai`, `google.genai.types`
-#   - streamlit-js-eval: `importlib.import_module("streamlit_js_eval")` refresh button
-# Standard library only otherwise: importlib, collections.abc, typing.
-# -----------------------------------------------------------------------------
-# Other scripts in this repo: app-final.py / app2.py / app3.py need `pip install openai`
-# separately (not declared here—you asked to align this file with app.end.py).
-
 streamlit>=1.28.0,<1.51
 google-genai>=1.0.0,<1.48
 streamlit-js-eval>=0.1.5
