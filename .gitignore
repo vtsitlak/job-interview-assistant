@@ -1,0 +1,12 @@
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+
+# Local Pyright/Pylance stub overrides (optional)
+typings/
+
+# Streamlit secrets — never commit API keys or credentials
+.streamlit/secrets.toml
+
+# Excluded per project preference
+app-final.py
